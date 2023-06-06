@@ -13,7 +13,7 @@ The code should run with no issues using the Anaconda distribution of Python.
 
 ## Code Description
 
-'data_reader.py' reads data collected with OBR 4600 (LUNA Innovations, Virgínia, EUA). 'read_from_dir.py' reads all files in a folder collected for different strain conditions. 
+'./src/data_reader.py' reads data collected with OBR 4600 (LUNA Innovations, Virgínia, EUA). './src/read_from_dir.py' reads all files in a folder collected for different strain conditions. 
 
 ## Future Work
 
