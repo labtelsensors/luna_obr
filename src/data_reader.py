@@ -70,6 +70,8 @@ def plotData(df,figure_path):
         logging.error('Unable save figure to path: ' + figure_path)
     plt.close()
 
+    return fig
+
 def readData(file_dir, file_prefix, file_sufix_list, save_figure=True, figure_dir='../figures/'):
     """ Plot dataframe.
     Args:
@@ -88,6 +90,8 @@ def readData(file_dir, file_prefix, file_sufix_list, save_figure=True, figure_di
     df = dropEmpty(df)
 
     if df and save_figure:
-        plotData(df,figure_path)    
-        
-    return df
+        figure = plotData(df,figure_path)    
+    else:
+        figure = None    
+    
+    return df, figure
