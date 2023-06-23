@@ -1,21 +1,43 @@
 import pandas as pd
 import matplotlib.pyplot as plt
-from data_reader import DataFrameReader
+from data_reader import LUNAOBRDataReader
 from os import listdir
 from os.path import isfile, join
-from scipy import interpolate
-import numpy as np
 import logging
 
+def sweepDirectory(file_dir, is_numeric=False):    
+    # Search for all txt files in dir
+    txt_file_list = [f for f in listdir(file_dir) if isfile(join(file_dir, f)) and f.endswith(".txt")]
+
+    if is_numeric:
+        # Remove files whose name does not begin with a number
+        txt_file_list = [f for f in txt_file_list if f[0].isnumeric()]    
+
+    # Remove sufix and sort by name
+    file_prefix_list = list(set([f.split('_')[0] for f in txt_file_list]))
+    file_prefix_list.sort()
+
+    return file_prefix_list
+
+# Path 
+file_dir = "../data/smf/fiber/"
+file_prefix_list = sweepDirectory(file_dir, is_numeric=False)
+
+# File sufix
+file_sufix_list = ["Lower"]
+
+for i,file_name in enumerate(file_prefix_list):
+    dfreader = LUNAOBRDataReader(file_dir, file_name, file_sufix_list)
+    figure = dfreader.readData(save_figure =True,figure_dir='../figures/fiber/')
+
+
+'''
 # Path 
 file_dir = "../data/smf/strain/"
 figure_path = "../figures/spectral_shift_versus_strain.png"
 
-# Search for all txt files in dir
-txt_file_list = [f for f in listdir(file_dir) if isfile(join(file_dir, f)) and f.endswith(".txt")]
-# Remove sufix and sort by name
-file_prefix_list = list(set([f.split('_')[0] for f in txt_file_list]))
-file_prefix_list.sort()
+# File names
+file_prefix_list = sweepDirectory(file_dir)
 
 # File sufix
 file_sufix_list = ["Upper","Lower"]
@@ -65,15 +87,7 @@ sf.show()
 # Temperature
 file_dir = "../data/smf/temperature1/"
 figure_path = "../figures/spectral_shift_versus_temperature.png"
-
-# Search for all txt files in dir
-txt_file_list = [f for f in listdir(file_dir) if isfile(join(file_dir, f)) and f.endswith(".txt")]
-# Remove files whose name does not begin with a number
-txt_file_list = [f for f in txt_file_list if f[0].isnumeric()]
-
-# Remove sufix and sort by name
-file_prefix_list = list(set([f.split('_')[0] for f in txt_file_list]))
-file_prefix_list.sort()
+file_prefix_list = sweepDirectory(file_dir, is_numeric=True)
 
 # Temperature parameters
 temperature = [*range(30,80,10)]+([*range(30,80,10)])
@@ -119,15 +133,7 @@ tf.show()
 
 # Read second temperature experiment
 file_dir = "../data/smf/temperature2-peltier/"
-
-# Search for all txt files in dir
-txt_file_list = [f for f in listdir(file_dir) if isfile(join(file_dir, f)) and f.endswith(".txt")]
-# Remove files whose name does not begin with a number
-txt_file_list = [f for f in txt_file_list if f[0].isnumeric()]
-
-# Remove sufix and sort by name
-file_prefix_list = list(set([f.split('_')[0] for f in txt_file_list]))
-file_prefix_list.sort()
+file_prefix_list = sweepDirectory(file_dir, is_numeric=True)
 temperature = [30,35,40,45,50,55,30,35,40,45,50]
 
 for i,file_name in enumerate(file_prefix_list):
@@ -145,3 +151,4 @@ plt.savefig("../figures/obr_temperature_peltier.png")
 fig.show()
 
 input()
+'''

@@ -5,14 +5,19 @@ import logging
 import linecache
 from scipy import interpolate
 
-class DataFrameReader:
-
+class LUNAOBRDataReader:
+    
     def __init__(self, file_dir, file_prefix, file_sufix_list):
         self.file_dir = file_dir
         self.file_prefix = file_prefix
         self.file_sufix_list = file_sufix_list
+        self.df = []
 
     def getDataFrame(self):
+        """ Get dataframe.
+        Returns:
+            df - dataframe      
+        """   
         return self.df    
 
     def getColumns(self, dim=0):
@@ -21,8 +26,7 @@ class DataFrameReader:
             dim - integer - index of list of dataframes
         Returns:
             list - columns labels      
-        """
-        
+        """        
         try:
             df = self.df[dim]
         except Exception as e:
@@ -64,7 +68,6 @@ class DataFrameReader:
         Returns:
             fig - figure
         """
-
         # Create paths
         file_name_list = ["{}_{}.txt".format(self.file_prefix, file_sufix) for file_sufix in self.file_sufix_list]
         path_list = ["".join((self.file_dir,file_name)) for file_name in file_name_list]
@@ -73,7 +76,7 @@ class DataFrameReader:
         # Read file
         self.df = [self.fileReader(path) for path in path_list]
         self.df = self._dropEmpty()
-
+        
         if self.df and save_figure:
             figure = self.plotFromDataFrame(figure_path)    
         else:
@@ -88,12 +91,15 @@ class DataFrameReader:
         Returns:
             df_clean - dataframe or list of dataframes
         """
-        not_empty = [i for i, df in enumerate(self.df) if df is not None]    
-        if not_empty:
-            df_clean = [self.df[i] for i in not_empty]
-            return df_clean
-        else:
-            return False
+        df_clean = [] 
+        for dataframe in self.df:
+            if dataframe is not None:   
+                for col_name in dataframe.columns:
+                    if (col_name.find('Unnamed') != -1):
+                        dataframe.drop(col_name, axis=1)
+                df_clean.append(dataframe) 
+
+        return df_clean
 
     def plotFromDataFrame(self,figure_path):
         """ Save plot of dataframe.
@@ -101,21 +107,18 @@ class DataFrameReader:
             df - dataframe or list of dataframes
         """    
         fig, ax = plt.subplots(len(self.df),figsize=(8,7))
-        
-        if len(self.df)>1:
-            for i in range(len(ax)):
-                ax[i].plot(self.df[i].iloc[:,0], self.df[i].iloc[:,1],linewidth=1)
-                ax[i].set_xlabel(self.df[i].columns[0])
-                ax[i].set_ylabel(self.df[i].columns[1])
-                ax[i].grid(alpha=0.5,linestyle='--')
-                ax[i].set_xlim([self.df[i].iloc[:,0].min(axis=0),self.df[i].iloc[:,0].max(axis=0)])
-        else:
-            ax.plot(self.df.iloc[:,0], self.df.iloc[:,1],linewidth=1)
-            ax.set_xlabel(self.df.columns[0])
-            ax.set_ylabel(self.df.columns[1])
-            ax.grid(alpha=0.5,linestyle='--')
-            ax.set_xlim([self.df.iloc[:,0].min(axis=0),self.df.iloc[:,0].max(axis=0)])
+        if not isinstance(ax, np.ndarray):
+            ax = [ax]
 
+        for i in range(len(ax)):
+            for k in range(1, self.df[i].shape[1]-1):
+                ax[i].plot(self.df[i].iloc[:,0], self.df[i].iloc[:,k],linewidth=1, label = self.df[i].columns[k])
+            ax[i].set_xlabel(self.df[i].columns[0])
+            ax[i].set_ylabel(self.df[i].columns[1])
+            ax[i].grid(alpha=0.5,linestyle='--')
+            ax[i].set_xlim([self.df[i].iloc[:,0].min(axis=0),self.df[i].iloc[:,0].max(axis=0)])
+            ax[i].legend()
+        
         try: 
             plt.savefig(figure_path)
         except:
@@ -128,29 +131,25 @@ class DataFrameReader:
         x_min_max = x_lim
         y_min_max = y_lim
 
-        if len(ax) > 1:
-            for i in range(len(ax)):        
-                ax[i].plot(old_fig.get_axes()[i].lines[0].get_xdata(),old_fig.get_axes()[i].lines[0].get_ydata(), 
-                        label=label)
-                ax[i].grid(alpha=0.5,linestyle='--')
-                ax[i].set_xlabel(old_fig.get_axes()[i].get_xlabel())
-                ax[i].set_ylabel(old_fig.get_axes()[i].get_ylabel())    
+        if not isinstance(ax, np.ndarray):
+            ax = [ax]
+        
+        for i in range(len(ax)):        
+            for k in range(1, self.df[i].shape[1]-1):
+                ax[i].plot(self.df[i].iloc[:,0], self.df[i].iloc[:,k],linewidth=1, label = label)
+            ax[i].grid(alpha=0.5,linestyle='--')
+            ax[i].set_xlabel(old_fig.get_axes()[i].get_xlabel())
+            ax[i].set_ylabel(old_fig.get_axes()[i].get_ylabel())    
 
-                if x_min_max:                
-                    x_candidate = self._getMinMax(old_fig.get_axes()[i].lines[0].get_xdata())
-                    y_candidate = self._getMinMax(old_fig.get_axes()[i].lines[0].get_ydata())
-                    x_min_max = self._updateMinMax(x_min_max,x_candidate)
-                    y_min_max = self._updateMinMax(y_min_max,y_candidate)
-            
-                else:    
-                    x_min_max = self._getMinMax(old_fig.get_axes()[i].lines[0].get_xdata())
-                    y_min_max = self._getMinMax(old_fig.get_axes()[i].lines[0].get_ydata())
-        else:
-                ax.plot(old_fig.get_axes().lines[0].get_xdata(),old_fig.get_axes().lines[0].get_ydata(), 
-                        label=label)
-                ax.grid(alpha=0.5,linestyle='--')
-                ax.set_xlabel(old_fig.get_axes().get_xlabel())
-                ax.set_ylabel(old_fig.get_axes().get_ylabel())
+            if x_min_max:                
+                x_candidate = self._getMinMax(old_fig.get_axes()[i].lines[0].get_xdata())
+                y_candidate = self._getMinMax(old_fig.get_axes()[i].lines[0].get_ydata())
+                x_min_max = self._updateMinMax(x_min_max,x_candidate)
+                y_min_max = self._updateMinMax(y_min_max,y_candidate)
+        
+            else:    
+                x_min_max = self._getMinMax(old_fig.get_axes()[i].lines[0].get_xdata())
+                y_min_max = self._getMinMax(old_fig.get_axes()[i].lines[0].get_ydata())
 
         return ax, x_min_max, y_min_max
     
