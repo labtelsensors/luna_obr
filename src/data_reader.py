@@ -4,6 +4,7 @@ import matplotlib.pyplot as plt
 import logging
 import linecache
 from scipy import interpolate
+import os
 
 class LUNAOBRDataReader:
     
@@ -44,7 +45,7 @@ class LUNAOBRDataReader:
         try:
             header_cmp = linecache.getline(file_path, 11, module_globals=None)
         except:
-            logging.error('Unable to read file from path: ' + file_path)
+            logging.error('Unable to read header: ' + file_path)
             return    
         
         # Check line 11 of header to identify if sensing is enabled:
@@ -60,6 +61,10 @@ class LUNAOBRDataReader:
             return 
         
         return df
+    
+    def _mkDir(self,dir_name):
+        if not os.path.isdir(dir_name):
+            os.makedirs(dir_name)  
 
     def readData(self, save_figure=True, figure_dir='../figures/'):
         """ Plot dataframe.
@@ -70,14 +75,16 @@ class LUNAOBRDataReader:
         """
         # Create paths
         file_name_list = ["{}_{}.txt".format(self.file_prefix, file_sufix) for file_sufix in self.file_sufix_list]
-        path_list = ["".join((self.file_dir,file_name)) for file_name in file_name_list]
-        figure_path = "{}{}.png".format(figure_dir,self.file_prefix)
-        
+        path_list = ["".join((self.file_dir,file_name)) if (self.file_dir[-1]=='/') else "/".join((self.file_dir,file_name))
+                     for file_name in file_name_list]        
+        figure_path = "".join((figure_dir,self.file_prefix)) if (figure_dir[-1]=='/') else "/".join((figure_dir,self.file_prefix))
+
         # Read file
         self.df = [self.fileReader(path) for path in path_list]
         self.df = self._dropEmpty()
         
         if self.df and save_figure:
+            self._mkDir(figure_dir)
             figure = self.plotFromDataFrame(figure_path)    
         else:
             figure = None    
@@ -107,6 +114,8 @@ class LUNAOBRDataReader:
             df - dataframe or list of dataframes
         """    
         fig, ax = plt.subplots(len(self.df),figsize=(8,7))
+        
+        # Check if is instance of np.ndarray
         if not isinstance(ax, np.ndarray):
             ax = [ax]
 
@@ -131,6 +140,7 @@ class LUNAOBRDataReader:
         x_min_max = x_lim
         y_min_max = y_lim
 
+        # Check if is instance of np.ndarray
         if not isinstance(ax, np.ndarray):
             ax = [ax]
         
@@ -216,3 +226,50 @@ class LUNAOBRDataReader:
         if x_candidate[1] > x[1]:
             x[1] = x_candidate[0]
         return x    
+    
+def getFolders(dir_name):
+# Search for all folders in dir
+    try:
+        folders_list = [f for f in os.listdir(dir_name) if os.path.isdir(os.path.join(dir_name, f))]
+    except Exception as err:
+        logging.error(f"Unexpected {err=}1, {type(err)=}")
+        return 
+    
+    if folders_list:
+        folders_path = ["".join((dir_name, folder)) if (dir_name[-1]=='/') else "/".join((dir_name, folder))
+                        for folder in folders_list]
+        return folders_path
+    else:
+        return [dir_name]
+
+def getFiles(file_dir, is_numeric=False, file_order=None):        
+    # Search for all txt files in dir
+    try:
+        txt_file_list = [f for f in os.listdir(file_dir) if os.path.isfile(os.path.join(file_dir, f)) and f.endswith(".txt")]
+    except Exception as err:
+        logging.error(f"Unexpected2 {err=}2, {type(err)=}")
+        return 
+
+    if is_numeric:
+        # Remove files whose names do not begin with a number
+        txt_file_list = [f for f in txt_file_list if f[0].isnumeric()]    
+
+    # Remove sufix and sort by name
+    file_prefix_list = list(set([f.split('_')[0] for f in txt_file_list]))
+    
+    if file_order is not None:
+        file_prefix_list = _sortFiles(file_prefix_list, file_order)
+    else:    
+        file_prefix_list.sort()
+
+    return file_prefix_list
+
+def _sortFiles(file_list, file_order):
+    order = list()
+    
+    for i, file_name in enumerate(file_order):
+        if file_name in file_list:
+            order.append(file_list.index(file_order[i]))
+
+    new_file_list = [file_list[i] for i in order]
+    return new_file_list
