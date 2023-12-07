@@ -8,11 +8,12 @@ import os
 
 class LUNAOBRDataReader:
     
-    def __init__(self, file_dir, file_prefix, file_sufix_list):
+    def __init__(self, file_dir, file_prefix, file_sufix_list, is_obr_file = True):
         self.file_dir = file_dir
         self.file_prefix = file_prefix
         self.file_sufix_list = file_sufix_list
         self.df = []
+        self.is_obr_file = is_obr_file
 
     def getDataFrame(self):
         """ Get dataframe.
@@ -35,38 +36,30 @@ class LUNAOBRDataReader:
             return
         return df.columns
     
-    def fileReader(self, file_path):
+    def fileReader(self, file_path, skip_rows):
         """ Read file from a specific path.
         Args:
             file_path - string
         Returns:
             df - dataframe
         """
-        try:
-            header_cmp = linecache.getline(file_path, 11, module_globals=None)
-        except:
-            logging.error('Unable to read header: ' + file_path)
-            return    
-        
-        # Check line 11 of header to identify if sensing is enabled:
-        # If so, header contains two additional rows
-        skip_rows = 11
-        if header_cmp.find("Gage length:") != -1:
-            skip_rows = skip_rows+2
-
         try:      
             df = pd.read_csv(file_path, sep="\t", skiprows=skip_rows, header=1, index_col=False)
         except:
-            logging.error('Unable to read file from path: ' + file_path)
-            return 
-        
+            try:
+                df = pd.read_csv(file_path, sep="\t", skiprows=skip_rows+2, header=1, index_col=False)
+                return df
+            except: 
+                logging.error('Unable to read file from path: ' + file_path)
+                return 
+            
         return df
     
     def _mkDir(self,dir_name):
         if not os.path.isdir(dir_name):
             os.makedirs(dir_name)  
 
-    def readData(self, save_figure=True, figure_dir='../figures/'):
+    def readData(self, save_figure=True, figure_dir='../figures/', skip_rows=13):
         """ Plot dataframe.
         Args:
             df - dataframe or list of dataframes
@@ -74,23 +67,30 @@ class LUNAOBRDataReader:
             fig - figure
         """
         # Create paths
-        file_name_list = ["{}_{}.txt".format(self.file_prefix, file_sufix) for file_sufix in self.file_sufix_list]
+        if self.file_sufix_list:
+            file_name_list = ["{}_{}.txt".format(self.file_prefix, file_sufix) for file_sufix in self.file_sufix_list]
+        else:
+            file_name_list = ["{}.txt".format(self.file_prefix)]
+        
         path_list = ["".join((self.file_dir,file_name)) if (self.file_dir[-1]=='/') else "/".join((self.file_dir,file_name))
                      for file_name in file_name_list]        
         figure_path = "".join((figure_dir,self.file_prefix)) if (figure_dir[-1]=='/') else "/".join((figure_dir,self.file_prefix))
 
         # Read file
-        self.df = [self.fileReader(path) for path in path_list]
+        self.df = [self.fileReader(path,skip_rows) for path in path_list]
         self.df = self._dropEmpty()
-        
+
         if self.df and save_figure:
             self._mkDir(figure_dir)
-            figure = self.plotFromDataFrame(figure_path)    
+            if self.is_obr_file:
+                figure = self.plotOBRFileFromDataFrame(figure_path) 
+            else:
+                figure = self.plotFromDataFrame(figure_path)    
         else:
             figure = None    
            
         return figure
-    
+
     def _dropEmpty(self):
         """ Drop empty dataframes from list.
         Args:
@@ -101,9 +101,9 @@ class LUNAOBRDataReader:
         df_clean = [] 
         for dataframe in self.df:
             if dataframe is not None:   
-                for col_name in dataframe.columns:
+                for col_name in dataframe.columns:   
                     if (col_name.find('Unnamed') != -1):
-                        dataframe.drop(col_name, axis=1)
+                        dataframe.drop(col_name, axis=1, inplace=True)
                 df_clean.append(dataframe) 
 
         return df_clean
@@ -113,14 +113,44 @@ class LUNAOBRDataReader:
         Args:
             df - dataframe or list of dataframes
         """    
-        fig, ax = plt.subplots(len(self.df),figsize=(8,7))
+        subplot_size = int(self.df[0].shape[1]/2)
+        fig, ax = plt.subplots(subplot_size,figsize=(8,7))
         
         # Check if is instance of np.ndarray
-        if not isinstance(ax, np.ndarray):
+        if (not isinstance(ax, np.ndarray)) & (not isinstance(ax, list)):
             ax = [ax]
 
         for i in range(len(ax)):
-            for k in range(1, self.df[i].shape[1]-1):
+            x_data = self.df[0].iloc[:,i*2]
+            y_data = self.df[0].iloc[:,(i*2)+1]    
+            labels = self.df[0].columns[i*2:(i*2)+2]  
+            ax[i].plot(x_data, y_data, linewidth=1)            
+            ax[i].set_xlabel(labels[0])
+            ax[i].set_ylabel(labels[1])
+            ax[i].grid(alpha=0.5,linestyle='--')
+            ax[i].set_xlim([x_data.min(),x_data.max()])
+        
+        try: 
+            plt.savefig(figure_path)
+        except:
+            logging.error('Unable save figure to path: ' + figure_path)
+        plt.close()
+
+        return fig
+    
+    def plotOBRFileFromDataFrame(self,figure_path):
+        """ Save plot of dataframe.
+        Args:
+            df - dataframe or list of dataframes
+        """   
+        fig, ax = plt.subplots(len(self.df),figsize=(8,7))
+
+        # Check if is instance of np.ndarray
+        if (not isinstance(ax, np.ndarray)) & (not isinstance(ax, list)):
+            ax = [ax]
+
+        for i in range(len(ax)):
+            for k in range(1, self.df[i].shape[1]):
                 ax[i].plot(self.df[i].iloc[:,0], self.df[i].iloc[:,k],linewidth=1, label = self.df[i].columns[k])
             ax[i].set_xlabel(self.df[i].columns[0])
             ax[i].set_ylabel(self.df[i].columns[1])
@@ -136,16 +166,55 @@ class LUNAOBRDataReader:
 
         return fig
     
-    def plotFromFigure(self, ax, old_fig, label, x_lim=[], y_lim=[]):
+    def plotFromFigure(self, ax, old_fig, label, x_lim=[], y_lim=[]):        
+        # Check if is instance of np.ndarray
+        if (not isinstance(ax, np.ndarray)) & (not isinstance(ax, list)):
+            ax = [ax]
+
+        # Instantiate variables for storing the plot limits
+        if x_lim:
+            x_min_max = x_lim
+        else:   
+            x_min_max = np.zeros((len(ax),2))
+        
+        if y_lim:
+            y_min_max = y_lim
+        else:   
+            y_min_max = np.zeros((len(ax),2))
+
+        # Plot from figure
+        for i in range(len(ax)):
+            x_data = self.df[0].iloc[:,i*2]
+            y_data = self.df[0].iloc[:,(i*2)+1]    
+            ax[i].plot(x_data, y_data, linewidth=1, label=label)            
+            ax[i].set_xlabel(old_fig.get_axes()[i].get_xlabel())
+            ax[i].set_ylabel(old_fig.get_axes()[i].get_ylabel())  
+            ax[i].grid(alpha=0.5,linestyle='--')
+
+            if x_lim:                
+                x_candidate = self._getMinMax(old_fig.get_axes()[i].lines[0].get_xdata())
+                x_min_max[i] = self._updateMinMax(x_min_max[i],x_candidate)
+            else:    
+                x_min_max[i] = self._getMinMax(old_fig.get_axes()[i].lines[0].get_xdata())
+
+            if y_lim:  
+                y_candidate = self._getMinMax(old_fig.get_axes()[i].lines[0].get_ydata())
+                y_min_max[i] = self._updateMinMax(y_min_max[i],y_candidate)
+            else:
+                y_min_max[i] = self._getMinMax(old_fig.get_axes()[i].lines[0].get_ydata())
+
+        return ax, x_min_max, y_min_max
+
+    def plotOBRFileFromFigure(self, ax, old_fig, label, x_lim=[], y_lim=[]):
         x_min_max = x_lim
         y_min_max = y_lim
 
         # Check if is instance of np.ndarray
-        if not isinstance(ax, np.ndarray):
+        if (not isinstance(ax, np.ndarray)) & (not isinstance(ax, list)):
             ax = [ax]
-        
+    
         for i in range(len(ax)):        
-            for k in range(1, self.df[i].shape[1]-1):
+            for k in range(1, self.df[i].shape[1]):
                 ax[i].plot(self.df[i].iloc[:,0], self.df[i].iloc[:,k],linewidth=1, label = label)
             ax[i].grid(alpha=0.5,linestyle='--')
             ax[i].set_xlabel(old_fig.get_axes()[i].get_xlabel())
@@ -258,13 +327,13 @@ def getFiles(file_dir, is_numeric=False, file_order=None):
     file_prefix_list = list(set([f.split('_')[0] for f in txt_file_list]))
     
     if file_order is not None:
-        file_prefix_list = _sortFiles(file_prefix_list, file_order)
+        file_prefix_list = sortFiles(file_prefix_list, file_order)
     else:    
         file_prefix_list.sort()
 
     return file_prefix_list
 
-def _sortFiles(file_list, file_order):
+def sortFiles(file_list, file_order):
     order = list()
     
     for i, file_name in enumerate(file_order):
